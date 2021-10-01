@@ -10,7 +10,7 @@ ipython = "*"
 awkward = "*"
 uproot = "*"
 numpy = "*"
-matplotlib = "*"
+matplotboard = "*"
 
 [requires]
 python_version = "3.9"
