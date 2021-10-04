@@ -4,6 +4,9 @@ import numpy as np
 import struct
 from datetime import datetime
 
+NO_RECREATE = True
+DATA_ROOT = "./data/"
+
 
 @dataclass
 class Event:
@@ -15,10 +18,6 @@ class Event:
     range_center: int
     scaler: float
     datetime: datetime
-
-    def plot(self):
-        import matplotlib.pyplot as plt
-        plt.plot(self.times, self.waveform)
 
 
 class DRSDatFile:
@@ -169,31 +168,32 @@ class DRSDatFile:
                                    self.N_BINS-self.EDGE_PEAK_KEEP_OUT)
                 peak_v = event.waveform[peak_idx]
 
-                post_peak_waveform = event.waveform[peak_idx:]
                 pre_peak_waveform = event.waveform[:peak_idx]
+                post_peak_waveform = event.waveform[peak_idx:]
                 noise_est = 0.5 * (np.percentile(event.waveform[:100], 95) - np.percentile(event.waveform[:100], 5))
 
                 # Start and end of pulse is clamped to be at least .25*EDGE_PEAK_KEEP_OUT from the edge
                 try:
-                    pulse_start_idx = max(np.nonzero(pre_peak_waveform > noise_est)[0][-1],
+                    pulse_start_idx = max(np.nonzero(pre_peak_waveform > noise_est)[0][-1]+1,
                                           self.EDGE_PEAK_KEEP_OUT//4)
                 except IndexError:
                     pulse_start_idx = self.EDGE_PEAK_KEEP_OUT//4
                 try:
-                    pulse_end_idx = min(np.nonzero(post_peak_waveform > noise_est)[0][-1],
+                    pulse_end_idx = min(np.nonzero(post_peak_waveform < noise_est)[0][0]+peak_idx,
                                         self.N_BINS - self.EDGE_PEAK_KEEP_OUT//4)
                 except IndexError:
                     pulse_end_idx = self.N_BINS - self.EDGE_PEAK_KEEP_OUT//4
 
                 t_peak = event.times[peak_idx]
                 offset = np.mean(event.waveform[:int(pulse_start_idx * 3 / 4)])
-                width = pulse_end_idx - pulse_start_idx
+                width = event.times[pulse_end_idx] - event.times[pulse_start_idx]
                 pre_pulse_noise = 0.5 * (np.percentile(event.waveform[:int(pulse_start_idx * 3 / 4)], 95) -
                                          np.percentile(event.waveform[:int(pulse_start_idx * 3 / 4)], 5))
 
                 event.waveform = event.waveform - offset
-                area = np.trapz(event.waveform[pulse_start_idx:pulse_end_idx],
-                                event.waveform[pulse_start_idx:pulse_end_idx])
+                area = max(np.trapz(event.waveform[pulse_start_idx:pulse_end_idx],
+                                    event.times[pulse_start_idx:pulse_end_idx]),
+                           0.0)
                 event.waveform = event.waveform + offset
 
                 event.area = area
@@ -227,9 +227,9 @@ if __name__ == "__main__":
     from os import walk
     from os.path import isfile, join, splitext
     from glob import glob
-    dat_files = [y for x in walk('.') for y in glob(join(x[0], '*.dat'))]
+    dat_files = [y for x in walk(DATA_ROOT) for y in glob(join(x[0], '*.dat'))]
     for dat_file in dat_files:
-        if isfile(splitext(dat_file)[0] + '.root'):
+        if isfile(splitext(dat_file)[0] + '.root') and NO_RECREATE:
             continue
         drs = DRSDatFile(dat_file)
         drs.to_root()

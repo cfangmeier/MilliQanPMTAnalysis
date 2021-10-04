@@ -2,6 +2,9 @@
 *.dat
 *.root
 
+# Analysis outputs
+PMTAnalysis-*/
+
 # Pycharm project files
 .idea/
 
@@ -134,3 +137,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+matplotboard/
