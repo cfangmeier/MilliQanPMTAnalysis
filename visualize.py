@@ -1,27 +1,27 @@
 import numpy as np
 from datetime import date
 import matplotlib.pyplot as plt
-import matplotboard as mpb
+from matplotboard import decl_fig, render, generate_report, configure, serve
+from os.path import realpath
 
 BLACKLIST = [
-    r'.\028\2021_10_01-1450-nosig.root',
+    r'*\2021_10_01-*-*.root',
 ]
+DATA_ROOT = realpath("data/")
 
-samples = {}
 
-
-@mpb.decl_fig
+@decl_fig
 def simple_waveform(sample, board, channel, id_):
-    load_data()
-    waveform = samples[sample]['waveform'].array()[id_]
-    times = samples[sample]['times'].array()[id_]
+    from matplotboard import d
+    waveform = d[sample]['waveform'].array()[id_]
+    times = d[sample]['times'].array()[id_]
     plt.plot(times, waveform)
 
 
-@mpb.decl_fig
+@decl_fig
 def histogram(sample, key, n_bins=100, range_=None, x_label="", title=""):
-    load_data()
-    data = samples[sample][key].array()
+    from matplotboard import d
+    data = d[sample][key].array()
     if range_ is None:
         range_ = (np.min(data), np.max(data))
     plt.hist(data, bins=n_bins, range=range_)
@@ -29,44 +29,57 @@ def histogram(sample, key, n_bins=100, range_=None, x_label="", title=""):
     plt.title(title)
 
 
-@mpb.decl_fig
+@decl_fig
 def correlation_v_bias(pmt_id, key):
-    load_data()
-    samples_ = [sample for sample in samples if sample[0] == pmt_id]
+    from matplotboard import d
+    samples_ = [sample for sample in d if sample[0] == pmt_id]
     avgs = []
     stds = []
     biases = []
     for sample in samples_:
-        data = samples[sample][key].array()
+        data = d[sample][key].array()
         avgs.append(np.mean(data))
         stds.append(np.std(data))
         biases.append(sample[2])
     plt.errorbar(biases, avgs, yerr=stds)
 
 
-def load_data():
+def find_samples():
     from os import walk
     from os.path import join, split
     from glob import glob
     from re import findall
-    import uproot
     rex = r"(\d{4}_\d{2}_\d{2})-(\d*)-(.*)\.root"
 
-    root_files = [y for x in walk('.') for y in glob(join(x[0], '*.root'))]
+    root_files = [y for x in walk(DATA_ROOT) for y in glob(join(x[0], '*.root'))]
+    for bl in BLACKLIST:
+        for blf in glob(join(DATA_ROOT, bl)):
+            try:
+                root_files.remove(blf)
+                print(f"Blacklisted {blf}")
+            except ValueError:
+                pass
+    samples = []
     for r_file in root_files:
-        if r_file in BLACKLIST:
-            print(f'blacklisting {r_file}')
-            continue
-        *_, pmt_id, filename = split(r_file)
-        date, voltage, signal = findall(rex, filename)[0]
-        key = (pmt_id[2:], date, voltage, signal)
-        if key not in samples:
-            samples[key] = uproot.open(r_file)['Events']
+        path, filename = split(r_file)
+        _, pmt_id = split(path)
+        date_, voltage, signal = findall(rex, filename)[0]
+        samples.append((pmt_id, date_, voltage, signal))
+    return samples, root_files
+
+
+def load_data():
+    from matplotboard import d
+    import uproot
+
+    samples, root_files = find_samples()
+    for sample, r_file in zip(samples, root_files):
+        d[sample] = uproot.open(r_file)['Events']
 
 
 def main():
 
-    load_data()
+    samples, root_files = find_samples()
     figures = {}
     keys = [
         ('scaler', {}),
@@ -78,19 +91,26 @@ def main():
     ]
     for sample in samples:
         pmt_id, date_, voltage, signal = sample
-        pfx = f"{pmt_id}_{date_}_{voltage}_{signal}_"
+        pfx = f"{pmt_id}-{date_}-{voltage}-{signal}-"
         figures[pfx+'wave_10'] = simple_waveform(sample, None, 1, 10)
 
-        for key, kwargs in keys:
-            figures[pfx+key] = histogram(sample, key, **kwargs)
+        # for key, kwargs in keys:
+        #     figures[pfx+key] = histogram(sample, key, **kwargs)
 
-    for key, _ in keys:
-        for pmt_id in ['007', '028']:
-            figures[pmt_id+"_"+key+'_vs_bias'] = correlation_v_bias(pmt_id, key)
+    # for key, _ in keys:
+    #     for pmt_id in ['007', '028']:
+    #         figures[pmt_id+"-"+key+'-vs_bias'] = correlation_v_bias(pmt_id, key)
 
-    mpb.configure(multiprocess=True, output_dir=f'PMTAnalysis-{date.today().isoformat()}')
-    mpb.render(figures)
-    mpb.generate_report(figures, 'PMT Results')
+    output_dir= f'PMTAnalysis-{date.today().isoformat()}'
+    configure(
+        multiprocess=True,
+        output_dir=output_dir,
+        data_loader=load_data,
+    )
+    render(figures, ncores=2)
+    generate_report(figures, 'PMT Results')
+
+    serve()
 
 
 if __name__ == "__main__":

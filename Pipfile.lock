@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "d591bce0d9b594abd9702c7bade385b47eb03caf00dffb1515799526a87d915e"
+            "sha256": "79566c77d7a98a15a01d0b76f727e05755f30b4dcb0d6f990098f8962c277f90"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -15,8 +15,7 @@
             }
         ]
     },
-    "default": {},
-    "develop": {
+    "default": {
         "awkward": {
             "hashes": [
                 "sha256:00e4de381af21e064939e25aaa0adb1560e34d9fa2aded2ab17c3fe5e192c390",
@@ -114,11 +113,11 @@
         },
         "jinja2": {
             "hashes": [
-                "sha256:1f06f2da51e7b56b8f238affdd6b4e2c61e39598a378cc49345bc1bd42a978a4",
-                "sha256:703f484b47a6af502e743c9122595cc812b0271f661722403114f71a79d0f5a4"
+                "sha256:827a0e32839ab1600d4eb1c4c33ec5a8edfbc5cb42dafa13b81f182f97784b45",
+                "sha256:8569982d3f0889eed11dd620c706d39b60c36d6d25843961f33f77fb6bc6b20c"
             ],
             "markers": "python_version >= '3.6'",
-            "version": "==3.0.1"
+            "version": "==3.0.2"
         },
         "kiwisolver": {
             "hashes": [
@@ -240,10 +239,10 @@
         },
         "matplotboard": {
             "hashes": [
-                "sha256:bf268a7de113cab2ebe6ccbb84af0555bf8a8a7279602af465dfa807ee4ea9a8"
+                "sha256:e06f88dacddc727d54c48ef52f4457b29fd1d41f82e8728f6b342f522133692f"
             ],
             "index": "pypi",
-            "version": "==1.1.6"
+            "version": "==1.2.0"
         },
         "matplotlib": {
             "hashes": [
@@ -541,5 +540,6 @@
             ],
             "version": "==0.2.5"
         }
-    }
+    },
+    "develop": {}
 }
