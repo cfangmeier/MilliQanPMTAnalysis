@@ -5,7 +5,8 @@ import struct
 from datetime import datetime
 
 NO_RECREATE = True
-DATA_ROOT = "./data/"
+INCLUDE_WAVEFORMS = True
+DATA_ROOT = r"C:\Users\Husker\University of Nebraska-Lincoln\UNL-Nebraska Detector Lab - PMTData"
 
 
 @dataclass
@@ -31,7 +32,6 @@ class DRSDatFile:
             self.file = open(dat_file, 'rb')
         else:
             self.file = dat_file
-
         self.path = dat_file
         self.channels = []
         self.bin_widths = {}
@@ -211,10 +211,14 @@ class DRSDatFile:
         for channel in self.channels:
             for event in self._events[channel]:
 
-                fields = ['id', 'board', 'channel', 'waveform', 'times', 'scaler',
+                fields = ['id', 'board', 'channel', 'scaler',
                           'area', 'width', 'noise', 'peak_t', 'peak_v']
+                if INCLUDE_WAVEFORMS:
+                    fields.append('times')
+                    fields.append('waveform')
                 for field in fields:
                     events[field].append(getattr(event, field))
+                events['timestamp'].append(event.datetime.timestamp())
 
         for key, val in events.items():
             events[key] = np.array(val)

@@ -6,9 +6,10 @@ from os.path import realpath
 
 BLACKLIST = [
     r'*\2021_10_01-*-*.root',
+    r'*\Bad-2021_10_06-*-*.root',
 ]
-DATA_ROOT = realpath("data/")
 
+DATA_ROOT = realpath(r"C:\Users\Husker\University of Nebraska-Lincoln\UNL-Nebraska Detector Lab - PMTData\\")
 
 @decl_fig
 def simple_waveform(sample, board, channel, id_):
@@ -42,6 +43,17 @@ def correlation_v_bias(pmt_id, key):
         stds.append(np.std(data))
         biases.append(sample[2])
     plt.errorbar(biases, avgs, yerr=stds)
+
+
+@decl_fig
+def trigger_rate_vs_time(sample):
+    from matplotboard import d
+    scaler = d[sample]['scaler']
+    timestamps = d[sample]['timestamp'].array()
+    timestamps = (timestamps - timestamps[0])/60
+    plt.plot(timestamps, scaler)
+    plt.xlabel("Time elapsed (minutes)")
+    plt.ylabel("Trigger Rate (Hz)")
 
 
 def find_samples():
@@ -92,22 +104,23 @@ def main():
     for sample in samples:
         pmt_id, date_, voltage, signal = sample
         pfx = f"{pmt_id}-{date_}-{voltage}-{signal}-"
-        figures[pfx+'wave_10'] = simple_waveform(sample, None, 1, 10)
+        # figures[pfx+'wave_10'] = simple_waveform(sample, None, 1, 10)
+        figures[pfx+'trigger_rate_vs_time'] = trigger_rate_vs_time(sample)
 
-        # for key, kwargs in keys:
-        #     figures[pfx+key] = histogram(sample, key, **kwargs)
+        for key, kwargs in keys:
+            figures[pfx+key] = histogram(sample, key, **kwargs)
 
-    # for key, _ in keys:
-    #     for pmt_id in ['007', '028']:
-    #         figures[pmt_id+"-"+key+'-vs_bias'] = correlation_v_bias(pmt_id, key)
+    for key, _ in keys:
+        for pmt_id in ['007', '028', '001N', '004', '013', '015', '018', '020', '024', '028']:
+            figures[pmt_id+"-"+key+'-vs_bias'] = correlation_v_bias(pmt_id, key)
 
-    output_dir= f'PMTAnalysis-{date.today().isoformat()}'
+    output_dir = f'PMTAnalysis-{date.today().isoformat()}'
     configure(
         multiprocess=True,
         output_dir=output_dir,
         data_loader=load_data,
     )
-    render(figures, ncores=2)
+    render(figures, ncores=8)
     generate_report(figures, 'PMT Results')
 
     serve()
