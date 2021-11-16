@@ -1,12 +1,13 @@
 from collections import defaultdict
 from dataclasses import dataclass
-import numpy as np
-import struct
 from datetime import datetime
+from pathlib import Path
+import struct
+import os
+import os.path
+import numpy as np
 
-NO_RECREATE = True
-INCLUDE_WAVEFORMS = True
-DATA_ROOT = r"C:\Users\Husker\University of Nebraska-Lincoln\UNL-Nebraska Detector Lab - PMTData"
+from config import the_config
 
 
 @dataclass
@@ -23,20 +24,21 @@ class Event:
 
 class DRSDatFile:
     N_BINS = 1024  # number of timing bins per channel
+    MAX_EVENTS = 100_000
 
     EARLY_SPLIT = 300
     EDGE_PEAK_KEEP_OUT = 10  # Clamp peak to be at least this far from the edges
 
-    def __init__(self, dat_file):
-        if isinstance(dat_file, str):
-            self.file = open(dat_file, 'rb')
-        else:
-            self.file = dat_file
-        self.path = dat_file
+    def __init__(self, path):
+        self.path = path
+        self.file = None
         self.channels = []
         self.bin_widths = {}
         self._events = defaultdict(list)
-        self._parse()
+        with open(self.path, "rb") as file:
+            self.file = file
+            self._parse()
+            self.file = None
         self._process()
 
     def _get_str(self, length):
@@ -111,6 +113,9 @@ class DRSDatFile:
             event_count += 1
             if not event_count % 1000:
                 print(f"Found {event_count} events")
+            if event_count > self.MAX_EVENTS:
+                print("Hit max number of events. Stopping now")
+                break
 
             event_serial_number = self._get_int()
             year = self._get_short()
@@ -202,10 +207,9 @@ class DRSDatFile:
                 event.peak_t = t_peak
                 event.peak_v = peak_v
 
-    def to_root(self):
-        from os.path import splitext
+    def to_root(self, root_file_path):
         import uproot
-        root_file = uproot.recreate(splitext(self.path)[0] + '.root')
+        root_file = uproot.recreate(root_file_path)
 
         events = defaultdict(list)
         for channel in self.channels:
@@ -213,7 +217,7 @@ class DRSDatFile:
 
                 fields = ['id', 'board', 'channel', 'scaler',
                           'area', 'width', 'noise', 'peak_t', 'peak_v']
-                if INCLUDE_WAVEFORMS:
+                if the_config.INCLUDE_WAVEFORMS:
                     fields.append('times')
                     fields.append('waveform')
                 for field in fields:
@@ -227,13 +231,20 @@ class DRSDatFile:
         root_file.close()
 
 
+def process_all():
+    found_paths, blacklisted_paths = the_config.get_dat_files()
+    for (idx, dat_file_path) in enumerate(found_paths):
+        relative_path = dat_file_path.relative_to(the_config.RAW_DATA_ROOT)
+        root_file_path = (Path(the_config.PROCESSED_DATA_ROOT) / relative_path).with_suffix(".root")
+
+        if the_config.RECREATE or not root_file_path.is_file():
+            print(f"Processing file       ({idx+1}/{len(found_paths)}): {dat_file_path.name}")
+            root_file_path.parent.mkdir(parents=True, exist_ok=True)
+            drs = DRSDatFile(dat_file_path)
+            drs.to_root(root_file_path)
+        else:
+            print(f"File exists, Skipping ({idx+1}/{len(found_paths)}): {dat_file_path.name}")
+
+
 if __name__ == "__main__":
-    from os import walk
-    from os.path import isfile, join, splitext
-    from glob import glob
-    dat_files = [y for x in walk(DATA_ROOT) for y in glob(join(x[0], '*.dat'))]
-    for dat_file in dat_files:
-        if isfile(splitext(dat_file)[0] + '.root') and NO_RECREATE:
-            continue
-        drs = DRSDatFile(dat_file)
-        drs.to_root()
+    process_all()
