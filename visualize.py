@@ -117,15 +117,15 @@ def trigger_rate_vs_time_v2(sample):
 
     prev_idx = 0
     while True:
-        cut_idx = np.argmax(timestamps_rel > (n+1)*resolution_seconds)
+        n += 1
+        cut_idx = np.argmax(timestamps_rel > n*resolution_seconds)
         if cut_idx == 0:
             break
         elif cut_idx == prev_idx:
             continue
 
         scaler_avgs.append(np.mean(scaler[prev_idx:cut_idx]))
-        avg_times.append((n+.5)*resolution_seconds)
-        n += 1
+        avg_times.append((n-.5)*resolution_seconds)
         prev_idx = cut_idx
     if scaler_avgs:
         datetimes = [datetime.fromtimestamp(ts+timestamps[0]) for ts in avg_times]
