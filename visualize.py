@@ -41,6 +41,19 @@ def correlation_v_bias(pmt_id, key):
 
 
 @decl_fig
+def scaler_vs_time(sample):
+    from matplotboard import d
+    scaler = d[sample]['scaler'].array()
+    timestamps = d[sample]['timestamp'].array()
+    relative_times = (timestamps - timestamps[0]) / 60
+
+    plt.plot(relative_times, scaler)
+    plt.xlabel("Time elapsed (minutes)")
+    plt.ylabel("Trigger Rate (Hz)")
+    plt.ylim((0, np.max(scaler)*1.1))
+
+
+@decl_fig
 def trigger_rate_vs_time(sample):
     from matplotboard import d
     scaler = d[sample]['scaler'].array()
@@ -73,6 +86,60 @@ def trigger_rate_vs_time(sample):
     plt.ylim((0, np.max(rates_hz)*1.1))
 
 
+@decl_fig
+def trigger_rate_vs_time_v2(sample):
+    from matplotboard import d
+    from matplotlib.dates import DateFormatter
+    from matplotlib.ticker import AutoMinorLocator
+    from datetime import datetime
+    scaler = d[sample]['scaler'].array()
+    timestamps = d[sample]['timestamp'].array()
+
+    mono_idxs = np.argsort(timestamps)
+    scaler = scaler[mono_idxs]
+    timestamps = timestamps[mono_idxs]
+
+    in_order = 0
+    out_order = 0
+    for idx1, idx2 in zip(mono_idxs[:-1], mono_idxs[1:]):
+        if idx2 > idx1:
+            in_order += 1
+        else:
+            out_order += 1
+    print(f"{out_order}/{in_order+out_order} ({100*out_order/(out_order+in_order):.2f}%) out of order")
+
+    timestamps_rel = timestamps - timestamps[0]
+
+    resolution_seconds = 10
+    scaler_avgs = []
+    avg_times = []
+    n = 0
+
+    prev_idx = 0
+    while True:
+        cut_idx = np.argmax(timestamps_rel > (n+1)*resolution_seconds)
+        if cut_idx == 0:
+            break
+        elif cut_idx == prev_idx:
+            continue
+
+        scaler_avgs.append(np.mean(scaler[prev_idx:cut_idx]))
+        avg_times.append((n+.5)*resolution_seconds)
+        n += 1
+        prev_idx = cut_idx
+    if scaler_avgs:
+        datetimes = [datetime.fromtimestamp(ts+timestamps[0]) for ts in avg_times]
+        plt.semilogy(datetimes, scaler_avgs)
+        plt.ylim((1, np.max(scaler_avgs)*1.1))
+        plt.minorticks_on()
+        plt.grid(visible=True, axis="x", which='minor', linestyle="--", alpha=0.4)
+        plt.grid(visible=True, axis="x", which='major')
+        plt.gca().xaxis.set_major_formatter(DateFormatter('%I:%M'))
+        plt.gca().xaxis.set_minor_locator(AutoMinorLocator(n=5))
+        plt.xlabel("Time of Event (HH:MM)")
+        plt.ylabel("Trigger Rate (Hz)")
+
+
 def find_samples():
     root_file_paths, _ = the_config.get_root_files()
     sample_ids = [the_config.id_from_path(path) for path in root_file_paths]
@@ -86,27 +153,30 @@ def load_data():
     sample_ids, root_file_paths = find_samples()
     for sample_id, r_file in zip(sample_ids, root_file_paths):
         if sample_id in d:
-            print(f"Warning, overwriting sample with id: {sample_id}")
+            print(f"Warning, duplicate sample with id: {sample_id}")
         d[sample_id] = uproot.open(r_file)['Events']
 
 
 def main():
 
     sample_ids, _ = find_samples()
+
     figures = {}
-    # keys = [
-    #     ('scaler', {}),
+    keys = [
+        ('scaler', {}),
     #     ('area', {'range_': (0, 35), 'x_label': 'area (V*ns)'}),
     #     ('width', {'range_': (0, 500), 'x_label': 'width (ns)'}),
     #     ('noise', {}),
     #     ('peak_t', {}),
     #     ('peak_v', {}),
-    # ]
+    ]
     for sample_id in sample_ids:
         pmt_id, date_, voltage, signal = sample_id
         pfx = f"{pmt_id}-{date_}-{voltage}-{signal}-"
         # figures[pfx+'wave_10'] = simple_waveform(sample, None, 1, 10)
+        figures[pfx+'scaler_vs_time'] = scaler_vs_time(sample_id)
         figures[pfx+'trigger_rate_vs_time'] = trigger_rate_vs_time(sample_id)
+        figures[pfx+'trigger_rate_vs_time_v2'] = trigger_rate_vs_time_v2(sample_id)
 
         # for key, kwargs in keys:
         #     figures[pfx+key] = histogram(sample_id, key, **kwargs)
@@ -117,11 +187,11 @@ def main():
 
     output_dir = f'PMTAnalysis-{date.today().isoformat()}'
     configure(
-        multiprocess=False,
+        multiprocess=True,
         output_dir=output_dir,
         data_loader=load_data,
     )
-    render(figures, ncores=8)
+    render(figures, ncores=4)
     generate_report(figures, 'PMT Results')
 
     serve()

@@ -24,7 +24,7 @@ class Event:
 
 class DRSDatFile:
     N_BINS = 1024  # number of timing bins per channel
-    MAX_EVENTS = 100_000
+    MAX_EVENTS = 1_000_000
 
     EARLY_SPLIT = 300
     EDGE_PEAK_KEEP_OUT = 10  # Clamp peak to be at least this far from the edges

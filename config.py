@@ -21,7 +21,8 @@ class Config:
     INCLUDE_WAVEFORMS: bool = True
     RAW_DATA_ROOT: Path = "data\\"
     PROCESSED_DATA_ROOT: Path = "processed_data\\"
-    BLACKLIST: list[str] = field(default_factory=list)
+    BANNED: list[str] = field(default_factory=list)  # Patterns for disallowed files
+    FILES: list[str] = field(default_factory=list)  # Patterns for allowed files - overrides BANNED
 
     def __post_init__(self):
         for f in fields(self):
@@ -29,7 +30,7 @@ class Config:
             default = getattr(self, name)
             type_ = f.type
 
-            # get from env.py, fallback to environment variables, and then defaults
+            # get from ./env.py, fallback to environment variables, and then defaults
             try:
                 import env
                 val = getattr(env, name)
@@ -54,34 +55,40 @@ class Config:
 
             setattr(self, name, val)
 
-    @staticmethod
-    def get_files(base_dir: Path, extension: str, blacklist: list[str]):
+    def get_files(self, base_dir: Path, extension: str):
         import os.path
         found_paths = []
-        blacklisted_paths = []
+        banned_paths = []
         for root, _, files in os.walk(base_dir):
             for file in files:
                 if not file.endswith(extension):
                     continue
                 path = Path(os.path.join(root, file))
 
-                blacklisted = any(path.match(pattern) for pattern in blacklist)
-                if blacklisted:
-                    blacklisted_paths.append(path)
+                if self.FILES:
+                    if any(path.match(pattern) for pattern in self.FILES):
+                        found_paths.append(path)
+                    else:
+                        banned_paths.append(path)
                 else:
-                    found_paths.append(path)
+                    if any(path.match(pattern) for pattern in self.BANNED):
+                        banned_paths.append(path)
+                    else:
+                        found_paths.append(path)
 
-        print(f"Found {len(found_paths)} files to process")
         print(f"Blacklisted the following files:")
-        for blacklisted_path in blacklisted_paths:
-            print(f"    {blacklisted_path}")
-        return found_paths, blacklisted_paths
+        for banned_path in banned_paths:
+            print(f"    {banned_path}")
+        print(f"Found {len(found_paths)} files to process. They are:")
+        for found_path in found_paths:
+            print(f"    {found_path}")
+        return found_paths, banned_paths
 
     def get_root_files(self):
-        return self.get_files(self.PROCESSED_DATA_ROOT, ".root", self.BLACKLIST)
+        return self.get_files(self.PROCESSED_DATA_ROOT, ".root")
 
     def get_dat_files(self):
-        return self.get_files(self.RAW_DATA_ROOT, ".dat", self.BLACKLIST)
+        return self.get_files(self.RAW_DATA_ROOT, ".dat")
 
     def id_from_path(self, path: Path):
         from re import findall
