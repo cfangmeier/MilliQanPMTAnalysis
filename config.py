@@ -2,6 +2,7 @@ from dataclasses import dataclass, field, fields
 from os import environ
 from os.path import dirname, split, join
 from pathlib import Path
+
 root_dir = dirname(__file__)
 data_dir = join(root_dir, 'data')
 
@@ -18,11 +19,13 @@ class Config:
       - list[str | int | float]
     """
     RECREATE: bool = False
+    VERBOSE: bool = False
     INCLUDE_WAVEFORMS: bool = True
     RAW_DATA_ROOT: Path = "data\\"
     PROCESSED_DATA_ROOT: Path = "processed_data\\"
     BANNED: list[str] = field(default_factory=list)  # Patterns for disallowed files
     FILES: list[str] = field(default_factory=list)  # Patterns for allowed files - overrides BANNED
+    AAAAAAAAAH: bool = False
 
     def __post_init__(self):
         for f in fields(self):
@@ -76,12 +79,13 @@ class Config:
                     else:
                         found_paths.append(path)
 
-        print(f"Blacklisted the following files:")
-        for banned_path in banned_paths:
-            print(f"    {banned_path}")
-        print(f"Found {len(found_paths)} files to process. They are:")
-        for found_path in found_paths:
-            print(f"    {found_path}")
+        if self.VERBOSE:
+            print(f"Blacklisted the following files:")
+            for banned_path in banned_paths:
+                print(f"    {banned_path}")
+            print(f"Found {len(found_paths)} files to process. They are:")
+            for found_path in found_paths:
+                print(f"    {found_path}")
         return found_paths, banned_paths
 
     def get_root_files(self):
@@ -95,6 +99,32 @@ class Config:
         date_, voltage, signal = findall(r"(\d{4}_\d{2}_\d{2})-(\d*)-(.*)\.root", path.name)[0]
         pmt_id = list(path.relative_to(self.PROCESSED_DATA_ROOT).parents)[-2].name
         return pmt_id, date_, voltage, signal
+
+    def find_samples(self, pmt_id=None, date=None, voltage=None, signal=None):
+        root_file_paths, _ = self.get_root_files()
+        samples = []
+        for root_file_path in root_file_paths:
+            sample_id = self.id_from_path(root_file_path)
+            if ((pmt_id is None or pmt_id == sample_id[0]) and (date is None or date == sample_id[1]) and
+                    (voltage is None or date == sample_id[2]) and (signal is None or date == sample_id[3])):
+                samples.append((sample_id, root_file_path))
+        return list(zip(*samples))
+
+    def all_pmt_ids(self):
+        samples, _ = self.find_samples()
+        return {sample[0] for sample in samples}
+
+    def all_dates(self):
+        samples, _ = self.find_samples()
+        return {sample[1] for sample in samples}
+
+    def all_voltages(self):
+        samples, _ = self.find_samples()
+        return {sample[2] for sample in samples}
+
+    def all_signals(self):
+        samples, _ = self.find_samples()
+        return {sample[3] for sample in samples}
 
 
 the_config = Config()

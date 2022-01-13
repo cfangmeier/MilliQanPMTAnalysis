@@ -112,7 +112,7 @@ class DRSDatFile:
                 break
             event_count += 1
             if not event_count % 1000:
-                print(f"Found {event_count} events")
+                print(f"\rFound {event_count} events", end="")
             if event_count > self.MAX_EVENTS:
                 print("Hit max number of events. Stopping now")
                 break
@@ -156,12 +156,14 @@ class DRSDatFile:
                     scaler=channel_scaler,
                     datetime=dt)
                 self._events[(board_number, channel_number)].append(event)
+        print()
 
     def _process(self):
         for channel in self.channels:
+            n_events = len(self._events[channel])
             for event in self._events[channel]:
                 if not event.id % 1000:
-                    print(f"Processing event {channel}:{event.id}")
+                    print(f"\rProcessing event {channel}:{event.id} ({100*event.id/n_events:.2f}%)       ", end="")
 
                 # If pulse is negative, invert the waveform
                 if abs(min(event.waveform)) > abs(max(event.waveform)):
@@ -206,6 +208,7 @@ class DRSDatFile:
                 event.noise = pre_pulse_noise
                 event.peak_t = t_peak
                 event.peak_v = peak_v
+        print()
 
     def to_root(self, root_file_path):
         import uproot
@@ -238,7 +241,8 @@ def process_all():
         root_file_path = (Path(the_config.PROCESSED_DATA_ROOT) / relative_path).with_suffix(".root")
 
         if the_config.RECREATE or not root_file_path.is_file():
-            print(f"Processing file       ({idx+1}/{len(found_paths)}): {dat_file_path.name}")
+            print(f"Processing file       ({idx+1}/{len(found_paths)}): "
+                  f"{dat_file_path.relative_to(the_config.RAW_DATA_ROOT)}")
             root_file_path.parent.mkdir(parents=True, exist_ok=True)
             drs = DRSDatFile(dat_file_path)
             drs.to_root(root_file_path)

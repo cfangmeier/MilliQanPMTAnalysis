@@ -10,6 +10,7 @@ uproot = "*"
 numpy = "*"
 matplotboard = "1.2.0"
 pandas = "*"
+beepy = "*"
 
 [dev-packages]
 

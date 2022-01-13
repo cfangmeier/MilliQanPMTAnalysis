@@ -6,6 +6,25 @@ from os.path import realpath
 from config import the_config
 
 
+def decorate(sample_id):
+    from matplotboard import d
+    pmt_id, date_, voltage, signal = sample_id
+    ts = d[sample_id]['timestamp'].array()
+    duration = (ts[-1] - ts[0]) / 60
+    text = (
+        f"PMT ID: {pmt_id}\n"
+        f"Date: {date_}\n"
+        f"Duration: {duration:.2f} mins\n"
+        f"Pulse Count: {len(ts)}\n"
+        f"Bias: {voltage} V\n"
+        f"Signal: {signal}"
+        )
+    plt.text(0.01, 0.99, text, transform=plt.gcf().transFigure,
+             horizontalalignment="left",
+             verticalalignment="top",
+             bbox=dict(facecolor='white', alpha=0.9, linewidth=2.0))
+
+
 @decl_fig
 def simple_waveform(sample, board, channel, id_):
     from matplotboard import d
@@ -23,6 +42,30 @@ def histogram(sample, key, n_bins=100, range_=None, x_label="", title=""):
     plt.hist(data, bins=n_bins, range=range_)
     plt.xlabel(x_label)
     plt.title(title)
+    decorate(sample)
+
+
+@decl_fig
+def histogram_2d(sample, key_x, key_y, n_bins=(100, 100), range_=None, x_label="", y_label="", title=""):
+    from matplotboard import d
+    # from matplotlib.colors import
+    data_x = d[sample][key_x].array()
+    data_y = d[sample][key_y].array()
+    if range_ is None or range_[0] is None:
+        range_x = (np.min(data_x), np.max(data_x))
+    else:
+        range_x = range_[0]
+    if range_ is None or range_[1] is None:
+        range_y = (np.min(data_y), np.max(data_y))
+    else:
+        range_y = range_[1]
+
+    plt.hist2d(data_x, data_y, bins=n_bins, range=(range_x, range_y), cmin=1)
+    plt.colorbar()
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+    decorate(sample)
 
 
 @decl_fig
@@ -41,116 +84,100 @@ def correlation_v_bias(pmt_id, key):
 
 
 @decl_fig
-def scaler_vs_time(sample):
-    from matplotboard import d
-    scaler = d[sample]['scaler'].array()
-    timestamps = d[sample]['timestamp'].array()
-    relative_times = (timestamps - timestamps[0]) / 60
-
-    plt.plot(relative_times, scaler)
-    plt.xlabel("Time elapsed (minutes)")
-    plt.ylabel("Trigger Rate (Hz)")
-    plt.ylim((0, np.max(scaler)*1.1))
-
-
-@decl_fig
-def trigger_rate_vs_time(sample):
-    from matplotboard import d
-    scaler = d[sample]['scaler'].array()
-    timestamps = d[sample]['timestamp'].array()
-    relative_times = timestamps - timestamps[0]
-    time_deltas = timestamps[1:] - timestamps[:-1]
-    hits_per_interval = scaler[1:] * time_deltas
-    new_interval = (timestamps[-1] - timestamps[0]) / 100
-    n_intervals = int(np.ceil(relative_times[-1] / new_interval))
-    cut_times = np.array([(i+1)*new_interval for i in range(n_intervals)])
-
-    rates_hz = []
-    interval_times = []
-    prev_idx = 0
-    for idx, cut_time in enumerate(cut_times):
-        cut_idx = np.argmax(relative_times > cut_time)
-        if cut_idx == prev_idx or cut_idx == 0:
-            continue
-        real_interval = relative_times[cut_idx] - relative_times[prev_idx]
-        hit_count = np.sum(hits_per_interval[prev_idx:cut_idx])
-        # print(idx, hit_count, real_interval)
-        rates_hz.append(hit_count / real_interval)
-        interval_times.append(np.mean([relative_times[cut_idx], relative_times[prev_idx]]))
-        prev_idx = cut_idx
-
-    interval_times = np.array(interval_times) / 60  # -> minutes
-    plt.plot(interval_times, rates_hz)
-    plt.xlabel("Time elapsed (minutes)")
-    plt.ylabel("Trigger Rate (Hz)")
-    plt.ylim((0, np.max(rates_hz)*1.1))
-
-
-@decl_fig
-def trigger_rate_vs_time_v2(sample):
+def trigger_rate_vs_time(pmt_ids):
     from matplotboard import d
     from matplotlib.dates import DateFormatter
     from matplotlib.ticker import AutoMinorLocator
+    import matplotlib.colors as mcolors
     from datetime import datetime
-    scaler = d[sample]['scaler'].array()
-    timestamps = d[sample]['timestamp'].array()
+    from random import shuffle
 
-    mono_idxs = np.argsort(timestamps)
-    scaler = scaler[mono_idxs]
-    timestamps = timestamps[mono_idxs]
+    samples = []
+    for pmt_id in pmt_ids:
+        samples.extend(the_config.find_samples(pmt_id=pmt_id)[0])
 
-    in_order = 0
-    out_order = 0
-    for idx1, idx2 in zip(mono_idxs[:-1], mono_idxs[1:]):
-        if idx2 > idx1:
-            in_order += 1
-        else:
-            out_order += 1
-    print(f"{out_order}/{in_order+out_order} ({100*out_order/(out_order+in_order):.2f}%) out of order")
+    if len(samples) <= 10:
+        colors = list(mcolors.TABLEAU_COLORS.values())
+    else:
+        colors = list(mcolors.XKCD_COLORS.values())
+        shuffle(colors)
+    for sample, color in zip(samples, colors):
+        scaler = d[sample]['scaler'].array()
+        timestamps = d[sample]['timestamp'].array()
 
-    timestamps_rel = timestamps - timestamps[0]
+        mono_idxs = np.argsort(timestamps)
+        scaler = scaler[mono_idxs]
+        timestamps = timestamps[mono_idxs]
 
-    resolution_seconds = 10
-    scaler_avgs = []
-    avg_times = []
-    n = 0
+        # in_order = 0
+        # out_order = 0
+        # for idx1, idx2 in zip(mono_idxs[:-1], mono_idxs[1:]):
+        #     if idx2 > idx1:
+        #         in_order += 1
+        #     else:
+        #         out_order += 1
+        # print(f"{out_order}/{in_order+out_order} ({100*out_order/(out_order+in_order):.2f}%) out of order")
 
-    prev_idx = 0
-    while True:
-        n += 1
-        cut_idx = np.argmax(timestamps_rel > n*resolution_seconds)
-        if cut_idx == 0:
-            break
-        elif cut_idx == prev_idx:
-            continue
+        timestamps_rel = timestamps - timestamps[0]
 
-        scaler_avgs.append(np.mean(scaler[prev_idx:cut_idx]))
-        avg_times.append((n-.5)*resolution_seconds)
-        prev_idx = cut_idx
-    if scaler_avgs:
-        datetimes = [datetime.fromtimestamp(ts+timestamps[0]) for ts in avg_times]
-        plt.semilogy(datetimes, scaler_avgs)
-        plt.ylim((1, np.max(scaler_avgs)*1.1))
-        plt.minorticks_on()
-        plt.grid(visible=True, axis="x", which='minor', linestyle="--", alpha=0.4)
-        plt.grid(visible=True, axis="x", which='major')
-        plt.gca().xaxis.set_major_formatter(DateFormatter('%I:%M'))
-        plt.gca().xaxis.set_minor_locator(AutoMinorLocator(n=5))
-        plt.xlabel("Time of Event (HH:MM)")
-        plt.ylabel("Trigger Rate (Hz)")
+        resolution_seconds = 20
+        scaler_avgs = []
+        avg_times = []
+        n = 0
+
+        prev_idx = 0
+        while True:
+            n += 1
+            cut_idx = np.argmax(timestamps_rel > n*resolution_seconds)
+            if cut_idx == 0:
+                break
+            elif cut_idx == prev_idx:
+                continue
+
+            scaler_avgs.append(np.mean(scaler[prev_idx:cut_idx]))
+            avg_times.append((n-.5)*resolution_seconds)
+            prev_idx = cut_idx
+        if scaler_avgs:
+            datetimes = [datetime.fromtimestamp(ts+timestamps[0]) for ts in avg_times]
+            plt.semilogy(np.array(avg_times)/60, scaler_avgs, label=str(sample), color=color)
+            plt.ylim((1, 10_000))
+            plt.minorticks_on()
+            plt.grid(visible=True, axis="both", which='minor', linestyle="--", alpha=0.4)
+            plt.grid(visible=True, axis="both", which='major')
+            plt.gca().xaxis.set_minor_locator(AutoMinorLocator(n=5))
+            plt.xlabel("Minutes into run")
+            plt.ylabel("Trigger Rate (Hz)")
+    plt.legend()
 
 
-def find_samples():
-    root_file_paths, _ = the_config.get_root_files()
-    sample_ids = [the_config.id_from_path(path) for path in root_file_paths]
-    return sample_ids, root_file_paths
+@decl_fig
+def observable_comparison(pmt_ids, key, sample_start=0.5, range_=None):
+    from matplotboard import d
+
+    all_data = []
+    labels = []
+    for pmt_id in pmt_ids:
+        sample_id = the_config.find_samples(pmt_id=pmt_id)[0][0]
+        sample_data = d[sample_id][key].array()
+        sample_data = sample_data[int(sample_start*len(sample_data)):]
+        all_data.append(sample_data)
+        labels.append(pmt_id)
+    labels, all_data = zip(*sorted(zip(labels, all_data)))
+    plt.violinplot(all_data,
+                   showextrema=False,
+                   showmeans=True,
+                   points=200,
+                   vert=False)
+    plt.yticks([x+1 for x in range(len(all_data))], labels)
+    if range_ is not None:
+        plt.xlim(range_)
 
 
 def load_data():
     from matplotboard import d
     import uproot
 
-    sample_ids, root_file_paths = find_samples()
+    sample_ids, root_file_paths = the_config.find_samples()
     for sample_id, r_file in zip(sample_ids, root_file_paths):
         if sample_id in d:
             print(f"Warning, duplicate sample with id: {sample_id}")
@@ -158,32 +185,32 @@ def load_data():
 
 
 def main():
-
-    sample_ids, _ = find_samples()
+    sample_ids, _ = the_config.find_samples()
 
     figures = {}
-    keys = [
-        ('scaler', {}),
-    #     ('area', {'range_': (0, 35), 'x_label': 'area (V*ns)'}),
-    #     ('width', {'range_': (0, 500), 'x_label': 'width (ns)'}),
-    #     ('noise', {}),
-    #     ('peak_t', {}),
-    #     ('peak_v', {}),
-    ]
     for sample_id in sample_ids:
         pmt_id, date_, voltage, signal = sample_id
         pfx = f"{pmt_id}-{date_}-{voltage}-{signal}-"
-        # figures[pfx+'wave_10'] = simple_waveform(sample, None, 1, 10)
-        figures[pfx+'scaler_vs_time'] = scaler_vs_time(sample_id)
-        figures[pfx+'trigger_rate_vs_time'] = trigger_rate_vs_time(sample_id)
-        figures[pfx+'trigger_rate_vs_time_v2'] = trigger_rate_vs_time_v2(sample_id)
 
-        # for key, kwargs in keys:
-        #     figures[pfx+key] = histogram(sample_id, key, **kwargs)
+        figures[pfx+'area'] = histogram(sample_id, 'area', range_=(0, 10), x_label='area (V*ns)')
+        figures[pfx+'width'] = histogram(sample_id, 'width', range_=(0, 500), x_label='width (ns)')
+        figures[pfx+'noise'] = histogram(sample_id, 'noise', range_=(0, 0.005), x_label='noise (V)')
+        figures[pfx+'peak_t'] = histogram(sample_id, 'peak_t', range_=None, x_label='')
+        figures[pfx+'peak_v'] = histogram(sample_id, 'peak_v', range_=(0, 0.5), x_label='')
 
-    # for key, _ in keys:
-    #     for pmt_id in ['007', '028', '001N', '004', '013', '015', '018', '020', '024', '028']:
-    #         figures[pmt_id+"-"+key+'-vs_bias'] = correlation_v_bias(pmt_id, key)
+        figures[pfx+'peak_v_vs_area'] = histogram_2d(sample_id, 'peak_v', 'area', x_label="peak_v", y_label="area",
+                                                     n_bins=(300, 300), range_=((0, 0.4), (0, 10)))
+
+        figures[pfx+'peak_v_vs_width'] = histogram_2d(sample_id, 'peak_v', 'width', x_label="peak_v", y_label="width",
+                                                      n_bins=(300, 300), range_=((0, 0.4), (0, 500)))
+
+    figures[f'all_trigger_rate_vs_time_v2'] = trigger_rate_vs_time(the_config.all_pmt_ids())
+
+    figures[f'all_peak_v'] = observable_comparison(the_config.all_pmt_ids(), 'peak_v', range_=(0, 0.15))
+    figures[f'all_noise'] = observable_comparison(the_config.all_pmt_ids(), 'noise', range_=(0, 0.005))
+    figures[f'all_area'] = observable_comparison(the_config.all_pmt_ids(), 'area', range_=(0, 10))
+    figures[f'all_width'] = observable_comparison(the_config.all_pmt_ids(), 'width', range_=(0, 500))
+    # figures[f'all_scaler'] = observable_comparison(the_config.all_pmt_ids(), 'scaler', )
 
     output_dir = f'PMTAnalysis-{date.today().isoformat()}'
     configure(
@@ -191,8 +218,17 @@ def main():
         output_dir=output_dir,
         data_loader=load_data,
     )
-    render(figures, ncores=4)
+    render(figures, ncores=8)
     generate_report(figures, 'PMT Results')
+
+    try:
+        import beepy
+        if the_config.AAAAAAAAAH:
+            beepy.beep(sound="wilhelm")
+        else:
+            beepy.beep(sound="coin")
+    except ImportError:
+        print('\a')  # UNIX Bell thingy
 
     serve()
 
