@@ -186,7 +186,7 @@ class DRSDatFile:
                 except IndexError:
                     pulse_start_idx = self.EDGE_PEAK_KEEP_OUT//4
                 try:
-                    pulse_end_idx = min(np.nonzero(post_peak_waveform < noise_est)[0][0]+peak_idx,
+                    pulse_end_idx = min(np.nonzero(post_peak_waveform <= noise_est)[0][0]+peak_idx,
                                         self.N_BINS - self.EDGE_PEAK_KEEP_OUT//4)
                 except IndexError:
                     pulse_end_idx = self.N_BINS - self.EDGE_PEAK_KEEP_OUT//4
